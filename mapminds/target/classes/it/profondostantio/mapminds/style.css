@@ -1,0 +1,34 @@
+.map-pane {
+    -fx-background-color: #ffffff;
+}
+
+.mind-node {  /*classe per i nodi*/
+    -fx-cursor: hand;
+}
+
+.node-shape {
+    -fx-fill: lightblue;
+    -fx-stroke: black;
+    -fx-stroke-width: 1;
+}
+
+.node-selected .node-shape {
+    -fx-fill: orange;
+    -fx-stroke: darkorange;
+    -fx-stroke-width: 3;
+}
+
+.node-text {
+    -fx-font-family: "Arial";
+    -fx-font-weight: bold;
+    -fx-fill: #333333;
+}
+
+.map-line {
+    -fx-stroke: #888888;
+    -fx-stroke-width: 2;
+}
+
+.line-dashed {
+    -fx-stroke-dash-array: 10 5;
+}
