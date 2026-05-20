@@ -33,7 +33,7 @@ public class MindMapApp extends Application {
     }
 
     private void mostraMenuPrincipale() {
-        // pulizia pre-menu per evitare conflitti di eventi grafici
+        // Pulizia pre-menu per evitare conflitti di eventi
         rootPane.getChildren().clear();
         selectedNode = null;
 
@@ -50,7 +50,6 @@ public class MindMapApp extends Application {
 
         menu.getChildren().addAll(titolo, btnNuova, btnCarica);
         Scene menuScene = new Scene(menu, 800, 600);
-        
         stage.setTitle("MapMinds - Benvenuto");
         stage.setScene(menuScene);
         stage.show();
@@ -74,19 +73,15 @@ public class MindMapApp extends Application {
         File file = fileChooser.showOpenDialog(stage);
         if (file != null) {
             try {
+                // Carichiamo i dati
                 Node caricato = StorageManager.load(file.getAbsolutePath());
                 if (caricato != null) {
                     mainRootNode = caricato;
                     selectedNode = null;
-                    
-                    // IL FIX: Platform.runLater evita crash di concorrenza eventi mouse
-                    Platform.runLater(() -> {
-                        avviaEditor();
-                        System.out.println("DEBUG: Mappa caricata con successo.");
-                    });
+                    // Usiamo Platform.runLater per evitare l'errore handleMouseEvent
+                    Platform.runLater(this::avviaEditor);
                 }
             } catch (Exception ex) { 
-                System.err.println("Errore nel caricamento: " + ex.getMessage());
                 ex.printStackTrace(); 
             }
         }
@@ -103,6 +98,7 @@ public class MindMapApp extends Application {
             else if (e.getCode() == KeyCode.DELETE || e.getCode() == KeyCode.BACK_SPACE) cancellaNodo();
         });
 
+        // RIPRISTINO TITOLO FINESTRA
         stage.setTitle("MapMinds Editor - [ESC] Menu | [S] Salva | [N] Nuovo | [CANC] Elimina");
         stage.setScene(editorScene);
     }
@@ -117,7 +113,7 @@ public class MindMapApp extends Application {
     }
 
     private void renderRecursive(Node node) {
-        // grafica nodi
+        // 1. GRAFICA NODO
         StackPane container = new StackPane();
         Shape shape;
         switch (node.getShape()) {
@@ -141,8 +137,17 @@ public class MindMapApp extends Application {
         container.setOnMousePressed(e -> {
             selectedNode = node;
             aggiornaColoriSelezione();
-            if (e.getButton() == MouseButton.SECONDARY) mostraMenuContesto(node, e.getScreenX(), e.getScreenY());
-            else if (e.getClickCount() == 2) rinominaNodo(node);
+            e.consume();
+        });
+
+        container.setOnMouseClicked(e -> {
+            if (e.getButton() == MouseButton.SECONDARY) {
+                // Tasto destro: Menu contestuale
+                mostraMenuContesto(node, e.getScreenX(), e.getScreenY());
+            } else if (e.getButton() == MouseButton.PRIMARY && e.getClickCount() == 2) {
+                // Doppio clic sinistro: Apre la nota
+                apriNota(node);
+            }
             e.consume();
         });
 
@@ -155,7 +160,7 @@ public class MindMapApp extends Application {
             updateLinesForNode(node);
         });
 
-        // 2. ARCHI (Linee)
+        // 2. LINEE E RICORSIONE
         for (Node child : node.getChildren()) {
             Line line = new Line(node.getX(), node.getY(), child.getX(), child.getY());
             line.setStrokeWidth(2);
@@ -166,7 +171,7 @@ public class MindMapApp extends Application {
                 renderAll();
             });
 
-            rootPane.getChildren().add(0, line); // mette le linee sotto i nodi
+            rootPane.getChildren().add(0, line);
             parentLines.put(child, line); 
             renderRecursive(child);
         }
@@ -206,6 +211,7 @@ public class MindMapApp extends Application {
         }
     }
 
+    // --- ALTRI METODI UTILITY ---
     private Polygon createHexagon(double r) {
         Polygon hex = new Polygon();
         for (int i = 0; i < 6; i++) {
@@ -216,19 +222,66 @@ public class MindMapApp extends Application {
 
     private void mostraMenuContesto(Node n, double x, double y) {
         ContextMenu ctx = new ContextMenu();
-        MenuItem c = new MenuItem("Cerchio");
-        MenuItem s = new MenuItem("Quadrato");
-        MenuItem h = new MenuItem("Esagono");
+        
+        MenuItem rinomina = new MenuItem("Rinomina...");
+        rinomina.setOnAction(e -> rinominaNodo(n));
+        
+        SeparatorMenuItem sep = new SeparatorMenuItem();
+        
+        MenuItem c = new MenuItem("Forma: Cerchio");
+        MenuItem s = new MenuItem("Forma: Quadrato");
+        MenuItem h = new MenuItem("Forma: Esagono");
         c.setOnAction(e -> { n.setShape("CIRCLE"); renderAll(); });
         s.setOnAction(e -> { n.setShape("SQUARE"); renderAll(); });
         h.setOnAction(e -> { n.setShape("HEXAGON"); renderAll(); });
-        ctx.getItems().addAll(c, s, h);
+        
+        ctx.getItems().addAll(rinomina, sep, c, s, h);
         ctx.show(stage, x, y);
     }
 
     private void rinominaNodo(Node n) {
         TextInputDialog d = new TextInputDialog(n.getText());
+        d.setTitle("Rinomina");
+        d.setHeaderText("Cambia testo del nodo:");
         d.showAndWait().ifPresent(txt -> { n.setText(txt); renderAll(); });
+    }
+
+    private void apriNota(Node n) {
+        Dialog<String> dialog = new Dialog<>();
+        dialog.setTitle("Nota del Nodo");
+        dialog.setHeaderText("Appunti per: " + n.getText());
+
+        // Bottoni personalizzati
+        ButtonType salvaButtonType = new ButtonType("Salva", ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().addAll(salvaButtonType, ButtonType.CANCEL);
+
+        // TextArea per il testo lungo
+        TextArea textArea = new TextArea(n.getNote() != null ? n.getNote() : "");
+        textArea.setWrapText(true);
+
+        GridPane grid = new GridPane();
+        grid.setMaxWidth(Double.MAX_VALUE);
+        grid.add(textArea, 0, 0);
+        GridPane.setHgrow(textArea, Priority.ALWAYS);
+        GridPane.setVgrow(textArea, Priority.ALWAYS);
+        
+        dialog.getDialogPane().setContent(grid);
+
+        // Focus sul testo all'apertura
+        Platform.runLater(textArea::requestFocus);
+
+        dialog.setResultConverter(dialogButton -> {
+            if (dialogButton == salvaButtonType) {
+                return textArea.getText();
+            }
+            return null;
+        });
+
+        dialog.showAndWait().ifPresent(result -> {
+            n.setNote(result);
+            // Non serve chiamare renderAll() perché la nota non modifica l'aspetto della mappa,
+            // ma salva l'informazione nel modello.
+        });
     }
 
     private void creaFiglio(Node parent) {

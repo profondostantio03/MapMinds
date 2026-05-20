@@ -15,6 +15,8 @@ public class Node implements Serializable {
     private String shape = "CIRCLE";
     private String lineStyle = "SOLID";
 
+    private String note = "";
+
     public Node(String text, double x, double y) {
         this.text = text;
         this.x = x;
@@ -46,4 +48,7 @@ public class Node implements Serializable {
     // metodi per lo stile della linea
     public String getLineStyle() { return lineStyle; }
     public void setLineStyle(String lineStyle) { this.lineStyle = lineStyle; }
+
+    public String getNote() { return note; }
+    public void setNote(String note) { this.note = note; }
 }
