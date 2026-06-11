@@ -15,6 +15,9 @@ public class Node implements Serializable {
     private String shape = "CIRCLE";
     private String lineStyle = "SOLID";
 
+    private String color = "#add8e6"; // Colore di default del nodo (LightBlue)
+    private String bgColor = "#fdfdfd";
+
     private String note = "";
 
     public Node(String text, double x, double y) {
@@ -51,4 +54,10 @@ public class Node implements Serializable {
 
     public String getNote() { return note; }
     public void setNote(String note) { this.note = note; }
+
+    public String getColor() { return color; }
+    public void setColor(String color) { this.color = color; }
+
+    public String getBgColor() { return bgColor; }
+    public void setBgColor(String bgColor) { this.bgColor = bgColor; }
 }

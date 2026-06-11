@@ -33,7 +33,6 @@ public class MindMapApp extends Application {
     }
 
     private void mostraMenuPrincipale() {
-        // Pulizia pre-menu per evitare conflitti di eventi
         rootPane.getChildren().clear();
         selectedNode = null;
 
@@ -58,7 +57,6 @@ public class MindMapApp extends Application {
     private void setupNuovaMappa() {
         TextInputDialog dialog = new TextInputDialog("Idea Centrale");
         dialog.setTitle("Nuova Mappa");
-        dialog.setHeaderText("Inizia un nuovo progetto");
         dialog.showAndWait().ifPresent(name -> {
             mainRootNode = new Node(name, 400, 300);
             avviaEditor();
@@ -67,29 +65,45 @@ public class MindMapApp extends Application {
 
     private void caricaMappaEsistente() {
         FileChooser fileChooser = new FileChooser();
-        fileChooser.setTitle("Apri File Mappa");
         fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Dati Mappa (*.dat)", "*.dat"));
-        
         File file = fileChooser.showOpenDialog(stage);
+        
         if (file != null) {
             try {
-                // Carichiamo i dati
                 Node caricato = StorageManager.load(file.getAbsolutePath());
                 if (caricato != null) {
                     mainRootNode = caricato;
                     selectedNode = null;
-                    // Usiamo Platform.runLater per evitare l'errore handleMouseEvent
                     Platform.runLater(this::avviaEditor);
                 }
-            } catch (Exception ex) { 
-                ex.printStackTrace(); 
-            }
+            } catch (Exception ex) { ex.printStackTrace(); }
         }
     }
 
     private void avviaEditor() {
         renderAll(); 
-        Scene editorScene = new Scene(rootPane, 800, 600);
+        
+        // --- CREAZIONE TOOLBAR ---
+        ToolBar toolBar = new ToolBar();
+        ColorPicker bgPicker = new ColorPicker(Color.web(mainRootNode.getBgColor()));
+        
+        bgPicker.setOnAction(e -> {
+            String hex = toHexString(bgPicker.getValue());
+            mainRootNode.setBgColor(hex);
+            rootPane.setStyle("-fx-background-color: " + hex + ";");
+        });
+        
+        toolBar.getItems().addAll(new Label("Sfondo Mappa:"), bgPicker);
+
+        // Colore dello sfondo iniziale
+        rootPane.setStyle("-fx-background-color: " + mainRootNode.getBgColor() + ";");
+
+        // --- LAYOUT PRINCIPALE ---
+        BorderPane mainLayout = new BorderPane();
+        mainLayout.setTop(toolBar);    // Barra in alto
+        mainLayout.setCenter(rootPane); // Mappa al centro
+
+        Scene editorScene = new Scene(mainLayout, 800, 600);
         
         editorScene.setOnKeyPressed(e -> {
             if (e.getCode() == KeyCode.N && selectedNode != null) creaFiglio(selectedNode);
@@ -98,7 +112,10 @@ public class MindMapApp extends Application {
             else if (e.getCode() == KeyCode.DELETE || e.getCode() == KeyCode.BACK_SPACE) cancellaNodo();
         });
 
-        // RIPRISTINO TITOLO FINESTRA
+        try {
+            editorScene.getStylesheets().add(getClass().getResource("style.css").toExternalForm());
+        } catch (Exception ignored) {}
+
         stage.setTitle("MapMinds Editor - [ESC] Menu | [S] Salva | [N] Nuovo | [CANC] Elimina");
         stage.setScene(editorScene);
     }
@@ -113,7 +130,6 @@ public class MindMapApp extends Application {
     }
 
     private void renderRecursive(Node node) {
-        // 1. GRAFICA NODO
         StackPane container = new StackPane();
         Shape shape;
         switch (node.getShape()) {
@@ -122,11 +138,20 @@ public class MindMapApp extends Application {
             default: shape = new Circle(40); break;
         }
 
-        shape.setFill((node == selectedNode) ? Color.ORANGE : Color.LIGHTBLUE);
-        shape.setStroke(Color.BLACK);
-        shape.setStrokeWidth((node == selectedNode) ? 3 : 1);
+        // Applichiamo il colore personalizzato del nodo
+        shape.setFill(Color.web(node.getColor()));
+        
+        // Evidenziamo il bordo se selezionato (mantenendo il colore interno)
+        if (node == selectedNode) {
+            shape.setStroke(Color.ORANGE);
+            shape.setStrokeWidth(3.5);
+        } else {
+            shape.setStroke(Color.web("#333333"));
+            shape.setStrokeWidth(1.5);
+        }
 
         Text label = new Text(node.getText());
+        label.getStyleClass().add("node-text");
         label.setMouseTransparent(true);
         container.getChildren().addAll(shape, label);
 
@@ -141,13 +166,8 @@ public class MindMapApp extends Application {
         });
 
         container.setOnMouseClicked(e -> {
-            if (e.getButton() == MouseButton.SECONDARY) {
-                // Tasto destro: Menu contestuale
-                mostraMenuContesto(node, e.getScreenX(), e.getScreenY());
-            } else if (e.getButton() == MouseButton.PRIMARY && e.getClickCount() == 2) {
-                // Doppio clic sinistro: Apre la nota
-                apriNota(node);
-            }
+            if (e.getButton() == MouseButton.SECONDARY) mostraMenuContesto(node, e.getScreenX(), e.getScreenY());
+            else if (e.getButton() == MouseButton.PRIMARY && e.getClickCount() == 2) apriNota(node);
             e.consume();
         });
 
@@ -160,11 +180,11 @@ public class MindMapApp extends Application {
             updateLinesForNode(node);
         });
 
-        // 2. LINEE E RICORSIONE
+        // LINEE
         for (Node child : node.getChildren()) {
             Line line = new Line(node.getX(), node.getY(), child.getX(), child.getY());
-            line.setStrokeWidth(2);
-            if ("DASHED".equals(child.getLineStyle())) line.getStrokeDashArray().addAll(10d, 5d);
+            line.getStyleClass().add("map-line");
+            if ("DASHED".equals(child.getLineStyle())) line.getStyleClass().add("line-dashed");
             
             line.setOnMouseClicked(e -> {
                 child.setLineStyle(child.getLineStyle().equals("SOLID") ? "DASHED" : "SOLID");
@@ -206,18 +226,15 @@ public class MindMapApp extends Application {
         for (Node n : visualNodes.keySet()) {
             StackPane sp = visualNodes.get(n);
             Shape s = (Shape) sp.getChildren().get(0);
-            s.setFill(n == selectedNode ? Color.ORANGE : Color.LIGHTBLUE);
-            s.setStrokeWidth(n == selectedNode ? 3 : 1);
+            
+            if (n == selectedNode) {
+                s.setStroke(Color.ORANGE);
+                s.setStrokeWidth(3.5);
+            } else {
+                s.setStroke(Color.web("#333333"));
+                s.setStrokeWidth(1.5);
+            }
         }
-    }
-
-    // --- ALTRI METODI UTILITY ---
-    private Polygon createHexagon(double r) {
-        Polygon hex = new Polygon();
-        for (int i = 0; i < 6; i++) {
-            hex.getPoints().addAll(r * Math.cos(i * Math.PI / 3), r * Math.sin(i * Math.PI / 3));
-        }
-        return hex;
     }
 
     private void mostraMenuContesto(Node n, double x, double y) {
@@ -226,6 +243,16 @@ public class MindMapApp extends Application {
         MenuItem rinomina = new MenuItem("Rinomina...");
         rinomina.setOnAction(e -> rinominaNodo(n));
         
+        // Selettore Colore Nodo
+        ColorPicker nodeColorPicker = new ColorPicker(Color.web(n.getColor()));
+        nodeColorPicker.setStyle("-fx-color-label-visible: false;"); // Aspetto più compatto
+        nodeColorPicker.setOnAction(e -> {
+            n.setColor(toHexString(nodeColorPicker.getValue()));
+            renderAll();
+        });
+        // CustomMenuItem permette di mettere widget complessi nei menu (false = non chiudere subito al click)
+        CustomMenuItem colorItem = new CustomMenuItem(new HBox(10, new Label("Colore:"), nodeColorPicker), false);
+
         SeparatorMenuItem sep = new SeparatorMenuItem();
         
         MenuItem c = new MenuItem("Forma: Cerchio");
@@ -235,53 +262,54 @@ public class MindMapApp extends Application {
         s.setOnAction(e -> { n.setShape("SQUARE"); renderAll(); });
         h.setOnAction(e -> { n.setShape("HEXAGON"); renderAll(); });
         
-        ctx.getItems().addAll(rinomina, sep, c, s, h);
+        ctx.getItems().addAll(rinomina, colorItem, sep, c, s, h);
         ctx.show(stage, x, y);
     }
 
-    private void rinominaNodo(Node n) {
-        TextInputDialog d = new TextInputDialog(n.getText());
-        d.setTitle("Rinomina");
-        d.setHeaderText("Cambia testo del nodo:");
-        d.showAndWait().ifPresent(txt -> { n.setText(txt); renderAll(); });
+    // --- FUNZIONI DI UTILITÀ ---
+
+    // Converte l'oggetto Color di JavaFX in una stringa HEX (es. #FF0000)
+    private String toHexString(Color color) {
+        return String.format("#%02X%02X%02X",
+            (int)(color.getRed() * 255),
+            (int)(color.getGreen() * 255),
+            (int)(color.getBlue() * 255));
+    }
+
+    private Polygon createHexagon(double r) {
+        Polygon hex = new Polygon();
+        for (int i = 0; i < 6; i++) {
+            hex.getPoints().addAll(r * Math.cos(i * Math.PI / 3), r * Math.sin(i * Math.PI / 3));
+        }
+        return hex;
     }
 
     private void apriNota(Node n) {
         Dialog<String> dialog = new Dialog<>();
-        dialog.setTitle("Nota del Nodo");
+        dialog.setTitle("Nota");
         dialog.setHeaderText("Appunti per: " + n.getText());
 
-        // Bottoni personalizzati
-        ButtonType salvaButtonType = new ButtonType("Salva", ButtonBar.ButtonData.OK_DONE);
-        dialog.getDialogPane().getButtonTypes().addAll(salvaButtonType, ButtonType.CANCEL);
+        ButtonType salva = new ButtonType("Salva", ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().addAll(salva, ButtonType.CANCEL);
 
-        // TextArea per il testo lungo
         TextArea textArea = new TextArea(n.getNote() != null ? n.getNote() : "");
         textArea.setWrapText(true);
 
         GridPane grid = new GridPane();
-        grid.setMaxWidth(Double.MAX_VALUE);
         grid.add(textArea, 0, 0);
         GridPane.setHgrow(textArea, Priority.ALWAYS);
         GridPane.setVgrow(textArea, Priority.ALWAYS);
-        
         dialog.getDialogPane().setContent(grid);
 
-        // Focus sul testo all'apertura
         Platform.runLater(textArea::requestFocus);
 
-        dialog.setResultConverter(dialogButton -> {
-            if (dialogButton == salvaButtonType) {
-                return textArea.getText();
-            }
-            return null;
-        });
+        dialog.setResultConverter(b -> b == salva ? textArea.getText() : null);
+        dialog.showAndWait().ifPresent(n::setNote);
+    }
 
-        dialog.showAndWait().ifPresent(result -> {
-            n.setNote(result);
-            // Non serve chiamare renderAll() perché la nota non modifica l'aspetto della mappa,
-            // ma salva l'informazione nel modello.
-        });
+    private void rinominaNodo(Node n) {
+        TextInputDialog d = new TextInputDialog(n.getText());
+        d.showAndWait().ifPresent(txt -> { n.setText(txt); renderAll(); });
     }
 
     private void creaFiglio(Node parent) {
@@ -307,14 +335,11 @@ public class MindMapApp extends Application {
 
     private void salvaConNome() {
         FileChooser fc = new FileChooser();
-        fc.setTitle("Salva Mappa");
-        fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("Dati Mappa (*.dat)", "*.dat"));
+        fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("Dati Mappa", "*.dat"));
         File f = fc.showSaveDialog(stage);
         if (f != null) {
-            try { 
-                StorageManager.save(mainRootNode, f.getAbsolutePath()); 
-                System.out.println("Mappa salvata: " + f.getName());
-            } catch (IOException ex) { ex.printStackTrace(); }
+            try { StorageManager.save(mainRootNode, f.getAbsolutePath()); } 
+            catch (IOException ex) { ex.printStackTrace(); }
         }
     }
 
